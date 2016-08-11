@@ -1,0 +1,34 @@
+from data_unit_tmp import *
+import data_loader
+from hickle import *
+import pickle
+import sys
+
+embedding_method = sys.argv[1]
+embedding = None
+
+if embedding_method == 'skip':
+    embedding = 'skipthoughts'
+elif embedding_method == 'word2vec':
+    embedding = 'word2vec'
+
+mqa = data_loader.DataLoader()
+story, qa = mqa.get_story_qa_data('train', 'plot')
+a = Dataset(story, qa)
+
+story, qa = mqa.get_story_qa_data('val', 'plot')
+b = Dataset(story, qa)
+
+#a_dict = a.embedding()
+a_dict = a.embedding('skipthoughts')
+b_dict = b.embedding('skipthoughts')
+
+a_dict['zq_val'] = b_dict['zq_val']
+a_dict['zsl_val'] = b_dict['zsl_val']
+a_dict['zaj_val'] = b_dict['zaj_val']
+a_dict['ground_truth_val'] = b_dict['ground_truth_val']
+
+filename = './hickle_dump/' + embedding_method + '_origin'
+f = open(filename, 'w')
+pickle.dump(a_dict, f)
+f.close()

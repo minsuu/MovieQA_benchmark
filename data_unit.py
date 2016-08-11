@@ -1,8 +1,9 @@
 import sys
 import numpy as np
-sys.path.append('../skip-thoughts')
+sys.path.append('/data/movieQA/skip-thoughts/')
 import skipthoughts
 from tqdm import tqdm
+from IPython import embed
 #from w2v_model import *
 import hickle
 import threading
@@ -85,12 +86,10 @@ class Dataset(object):
             print 'embedding process start...!'
             print "================================================================================================================="
 
-            for i in xrange(a,b):
-                qa_info = self.qa[i]
+            for qa_info in self.qa:
                 """ ==================================================
                 getting basic factor of dataset."""
                 question = str(qa_info.question)
-                #question = str(qa_info.question).split()
                 answers = [str(answer) for answer in qa_info.answers]
                 correct_index = qa_info.correct_index
                 imdb_key = str(qa_info.imdb_key)
@@ -100,25 +99,20 @@ class Dataset(object):
                 validation_flag = str(qa_info.qid)
                 """================================================="""
 
-
                 for answer in answers:
                     if len(answer) == 0: error = True
                 if error == True : continue
                 question_embedding = encode_w2v_gensim(question) # word2vec embedding : question
-                print "question embedding shape >> ",
-                print question_embedding.shape
 
                 local_answers = [encode_w2v_gensim(answer) for answer in answers] # word2vec embedding : answer
                 local_stories = []
                 if imdb_key in imdb_key_check: last_stories
                 else:
                     imdb_key_check[imdb_key] = 1
-                    for paragraph in stories:
-                        paragraph_tokenize = sent_tokenize(paragraph)
-                        for sentences in paragraph_tokenize:
-                            local_stories.append(encode_w2v_gensim(sentences)) # word2vec embedding : story
+                    for sentence in stories:
+                        local_stories.append(encode_w2v_gensim(sentence))
 
-                w2v_dim = 100
+                w2v_dim = 300
                 if validation_flag.find('train') != -1:
                     self.zq.append(question_embedding.reshape((1,w2v_dim)))
                     self.zaj.append(np.array(local_answers))
@@ -131,14 +125,14 @@ class Dataset(object):
                 if validation_flag.find('val') != -1:
                     self.zq_val.append(question_embedding.reshape((1,w2v_dim)))
                     self.zaj_val.append(np.array(local_answers))
-                    self.ground_truth_val.append(np.array(correct_index))
+                    self.ground_truth_val.append(correct_index)
                     zsl_row = np.array(local_stories).shape[0]
                     print "zsl shape >> ",
                     print np.array(local_stories).shape
                     self.zsl_val.append(np.array(local_stories))
 
 
-                print "==========================="
+                print "===================================================="
                 print "each QAInfo status >> "
                 print "question embedding shape >> ",
                 print np.array(self.zq).shape
@@ -152,15 +146,18 @@ class Dataset(object):
                     print np.array(self.zsl_val).shape
                 except:
                     print "warning : dimension error."
+                print "ground truth embedding shape >> ", np.array(self.ground_truth).shape
+                print np.array(self.ground_truth_val).shape
+
 
 
             w2v_dict = dict()
-            w2v_dict['zq_train'] = np.reshape(np.array(self.zq), (-1,1,100))
+            w2v_dict['zq_train'] = np.reshape(np.array(self.zq), (-1,1,w2v_dim))
             w2v_dict['zaj_train'] = np.array(self.zaj)
             w2v_dict['zsl_train'] = self.zsl
             w2v_dict['ground_truth_train'] = np.array(self.ground_truth)
 
-            w2v_dict['zq_val'] = np.reshape(np.array(self.zq_val), (-1,1,100))
+            w2v_dict['zq_val'] = np.reshape(np.array(self.zq_val), (-1,1,w2v_dim))
             w2v_dict['zaj_val'] = np.array(self.zaj_val)
             w2v_dict['zsl_val'] = self.zsl_val
             w2v_dict['ground_truth_val'] = np.array(self.ground_truth_val)
@@ -172,17 +169,12 @@ class Dataset(object):
             return w2v_dict
 
 
-
-
-
-
         if embedding_method == 'skipthoughts':
             def embedding_thread(x, y, output):
                 imdb_key_check = {}
                 last_stories = []
                 for i in tqdm(xrange(x,y)):
                     error = False
-                    #if i == 100 : break
 
                     qa_info = self.qa[i]
                     question = str(qa_info.question)
@@ -200,38 +192,29 @@ class Dataset(object):
                     assert question_embedding.shape == (1,4800)
 
                     local_answers = skipthoughts.encode(model, answers)
-                    #local_answers = [skipthoughts.encode(model, [str(answer)]) for answer in answers]
 
 
                     stories = self.story[imdb_key]
 
-
                     local_stories = []
-                    #for s in stories : print [str(s)]
                     if imdb_key in imdb_key_check: local_stories = last_stories
                     else:
                         imdb_key_check[imdb_key] = 1
                         local_stories = skipthoughts.encode(model, stories)
-                        """
+                        '''
                         for sentence in stories:
-                            local_stories.append(skipthoughts.encode(model, [sentence]))
-                        """
-                            """
+                            #local_stories.append(skipthoughts.encode(model, [sentence]))
                             paragraph_tokenize = sent_tokenize(paragraph)
                             for sentences in paragraph_tokenize:
                                 words_detected = 0
-                                #print 'word >> ', words_in_question
-                                #print 'sentence >> ', sentences
                                 for w in words_in_question:
                                     if sentences.find(w) != -1: words_detected += 1
-                                #print 'result >> ', words_detected
 
                                 if words_detected >= 1: local_stories.append(skipthoughts.encode(model, [sentences])) # skip embedding : story
-                            """
-
-
-                        #local_stories = [skipthoughts.encode(model, [str(s)])  for s in stories]
+                        '''
+                        print local_stories.shape
                         last_stories = local_stories
+
                     skip_dim = 4800
                     if validation_flag.find('train') != - 1:
                         self.zq.append(question_embedding)
@@ -280,18 +263,6 @@ class Dataset(object):
                 output.put(self.ground_truth)
                 output.put(self.ground_truth_val)
 
-            # This code is run by multithreading, but do not scale well..
-            """
-            qa_length = len(self.qa)
-            ts = qa_length
-            th = [threading.Thread(target=embedding_thread, args=(i*ts,(i+1)*ts)) for i in xrange(qa_length/ts)]
-            print "load dataset by multithreading."
-            for i in xrange(len(th)): th[i].start()
-            for i in xrange(len(th)): th[i].join()
-            """
-
-
-
             qa_length = len(self.qa)
             worker = 36
             step_size = qa_length / worker
@@ -335,21 +306,6 @@ class Dataset(object):
                 skip_dict['ground_truth_val'].extend(gt_tmp_val)
 
             for p in procs : p.join()
-            #embedding_thread(int(a),int(b))
-
-            skipthoughts_dict = dict()
-            skipthoughts_dict['zq_train'] = np.array(self.zq)
-            skipthoughts_dict['zaj_train'] = np.array(self.zaj)
-            skipthoughts_dict['zsl_train'] = self.zsl
-            skipthoughts_dict['ground_truth_train'] = np.array(self.ground_truth)
-
-            skipthoughts_dict['zq_val'] = np.array(self.zq_val)
-            skipthoughts_dict['zaj_val'] = np.array(self.zaj_val)
-            skipthoughts_dict['zsl_val'] = self.zsl_val
-            skipthoughts_dict['ground_truth_val'] = np.array(self.ground_truth_val)
-
-            #self.num_train_examples = np.array(skip_dict['zq_train']).shape[0]
-            #self.num_val_examples = np.array(skip_dict['zq_val']).shape[0]
 
             for keys in key_list:
                 if 'zsl' in keys: continue
